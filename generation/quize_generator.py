@@ -1,8 +1,64 @@
 
+import os
+import json
+from groq import Groq
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 class QuizGenerator:
+    def __init__(self):
+        self.client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    
     def generate_quiz(self, topic, level):
-        """Generate quiz questions based on topic and difficulty"""
-        
+        """Generate quiz questions based on topic and difficulty using Groq API"""
+        try:
+            # Define prompt based on difficulty level
+            prompts = {
+                "Beginner": f"Generate 3 multiple choice quiz questions about {topic} for beginners. Each question should have 4 options (A, B, C, D) with one correct answer. Include the correct answer and a brief explanation. Format as JSON with fields: question, options (array), correct (index 0-3), explanation.",
+                "Intermediate": f"Generate 3 multiple choice quiz questions about {topic} for intermediate learners. Each question should have 4 options (A, B, C, D) with one correct answer. Include the correct answer and a brief explanation. Format as JSON with fields: question, options (array), correct (index 0-3), explanation.",
+                "Advanced": f"Generate 3 multiple choice quiz questions about {topic} for advanced learners. Each question should have 4 options (A, B, C, D) with one correct answer. Include the correct answer and a detailed explanation. Format as JSON with fields: question, options (array), correct (index 0-3), explanation."
+            }
+            
+            prompt = prompts.get(level, prompts["Beginner"])
+            
+            chat_completion = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                model="llama-3.1-8b-instant",  # Using Llama 3.1 model
+            )
+            
+            response_text = chat_completion.choices[0].message.content
+            
+            # Extract JSON from the response
+            start_idx = response_text.find('[')
+            end_idx = response_text.rfind(']') + 1
+            
+            if start_idx != -1 and end_idx != 0:
+                json_str = response_text[start_idx:end_idx]
+                try:
+                    quiz_data = json.loads(json_str)
+                    return quiz_data
+                except json.JSONDecodeError:
+                    # If JSON parsing fails, return fallback quiz
+                    print("Failed to parse JSON from Groq response")
+                    return self._fallback_quiz(topic, level)
+            else:
+                # If no JSON found, return fallback quiz
+                print("No JSON found in Groq response")
+                return self._fallback_quiz(topic, level)
+        except Exception as e:
+            # Fallback to original quiz if API fails
+            print(f"Error generating quiz with Groq: {e}")
+            return self._fallback_quiz(topic, level)
+    
+    def _fallback_quiz(self, topic, level):
+        """Fallback quiz when model is unavailable"""
         quizzes = {
             "Beginner": self._beginner_quiz(topic),
             "Intermediate": self._intermediate_quiz(topic),
